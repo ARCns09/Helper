@@ -3,7 +3,7 @@
 	"id": "helper",
 	"version": "${version}",
 	"name": "Helper",
-	"description": "This is an example description! Tell everyone what your mod is about!",
+	"description": "A lightweight, pure client-side recipe viewer and item browser.",
 	"authors": [
 		"Me!"
 	],
@@ -13,17 +13,13 @@
 	},
 	"license": "CC0-1.0",
 	"icon": "assets/helper/icon.png",
-	"environment": "*",
+	"environment": "client",
 	"entrypoints": {
-		"main": [
-			"com.example.Helper"
-		],
 		"client": [
 			"com.example.client.HelperClient"
 		]
 	},
 	"mixins": [
-		"helper.mixins.json",
 		{
 			"config": "helper.client.mixins.json",
 			"environment": "client"

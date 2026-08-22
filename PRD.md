@@ -65,3 +65,8 @@ Helper should include a lightweight configuration file (`helper-config.json` sto
 3.  **UI Widgets:** Build the `ItemPanelWidget` (grid layout) and the bottom search field.
 4.  **Recipe Indexer:** Create the caching logic that reads `ClientRecipeManager` without crashing.
 5.  **Recipe Display:** Build the popup screen that correctly formats and renders recipe ingredients via `DrawContext`.
+
+[STRICT CONSTRAINTS]
+1. DO NOT run any Gradle build/jar compilation commands on this device (do not run `./gradlew build`, `./gradlew jar`, etc.).
+2. DO NOT touch, modify, overwrite, or delete `.github/workflows/build-mod.yml`. It is strictly read-only.
+3. Focus solely on writing the Java source code, mixins, resources, and configuration files. All builds are handled remotely via GitHub Actions.
