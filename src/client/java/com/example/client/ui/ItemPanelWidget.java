@@ -3,7 +3,6 @@ package com.example.client.ui;
 import net.minecraft.client.MinecraftClient;
 import net.minecraft.client.font.TextRenderer;
 import net.minecraft.client.gui.DrawContext;
-import net.minecraft.client.gui.widget.TextFieldWidget;
 import net.minecraft.item.Item;
 import net.minecraft.item.ItemStack;
 import net.minecraft.registry.Registries;
@@ -11,6 +10,7 @@ import net.minecraft.text.Text;
 import net.minecraft.client.gui.Click;
 import net.minecraft.client.input.KeyInput;
 import net.minecraft.client.input.CharInput;
+import org.lwjgl.glfw.GLFW;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -18,15 +18,19 @@ import java.util.List;
 public class ItemPanelWidget {
     private final MinecraftClient client;
     
-    // Grid positioning (computed dynamically)
+    // Grid positioning
     private int gridX, gridY;
     private final int itemSize = 18; 
     private int columns;
     private int rows;
     private int screenWidth, screenHeight;
     
-    // Search field
-    private TextFieldWidget searchField;
+    // Manual search (no TextFieldWidget)
+    private String searchQuery = "";
+    private boolean searchFocused = false;
+    private int searchCursorTick = 0;
+    
+    // Search bar position (bottom center)
     private int searchBoxX, searchBoxY, searchBoxW, searchBoxH;
     
     private List<Item> allItems;
@@ -34,50 +38,54 @@ public class ItemPanelWidget {
     
     private int page = 0;
     
-    // Navigation header bounds
-    private int headerY;
+    // Navigation header
+    private int headerY, headerH;
     private int navLeftX, navRightX, navBtnW, navBtnH;
+    private int panelW;
+    
+    // Colors - EMI-like slate blue tint
+    private static final int BG_PANEL = 0x66202535;      // Subtle dark slate background
+    private static final int BG_HEADER = 0xBB2A2F42;     // Slightly more opaque header
+    private static final int BG_SLOT_DARK = 0x22000000;   // Checkerboard dark
+    private static final int BG_SLOT_LIGHT = 0x11FFFFFF;  // Checkerboard light
+    private static final int BG_SEARCH = 0xDD1A1E2E;     // Search bar background
+    private static final int BORDER_COLOR = 0xFF4A4F6A;   // Muted blue-gray border
+    private static final int NAV_BTN_BG = 0xAA2A2F42;    // Nav button normal
+    private static final int NAV_BTN_HOVER = 0xCC3A4058;  // Nav button hover
     
     public ItemPanelWidget(int screenWidth, int screenHeight, int guiRight, int guiTop, int guiHeight) {
         this.client = MinecraftClient.getInstance();
         this.screenWidth = screenWidth;
         this.screenHeight = screenHeight;
         
-        // Grid starts right after inventory, fills to screen edge
-        // Leave 2px margin on sides
+        // Grid starts right after inventory
         this.gridX = guiRight + 4;
         int availWidth = screenWidth - this.gridX - 2;
         this.columns = Math.max(1, availWidth / itemSize);
+        this.panelW = columns * itemSize;
         
-        // Header at top of panel area (2px from screen top)
+        // Header: 16px tall 
+        this.headerH = 16;
         this.headerY = 2;
-        this.navBtnW = 12;
-        this.navBtnH = 12;
+        this.navBtnW = 14;
+        this.navBtnH = 14;
         
         // Grid starts below header
-        this.gridY = this.headerY + navBtnH + 4;
+        this.gridY = this.headerY + headerH + 2;
         
-        // Search bar at bottom: centered, 20px from bottom
+        // Search bar at bottom center
         this.searchBoxW = Math.min(200, screenWidth - 20);
-        this.searchBoxH = 16;
+        this.searchBoxH = 14;
         this.searchBoxX = (screenWidth - searchBoxW) / 2;
         this.searchBoxY = screenHeight - searchBoxH - 4;
         
-        // Available rows between grid top and search bar
+        // Available rows
         int availHeight = this.searchBoxY - 4 - this.gridY;
         this.rows = Math.max(1, availHeight / itemSize);
         
-        // Navigation button positions
+        // Nav button positions
         this.navLeftX = this.gridX;
-        this.navRightX = this.gridX + (this.columns * itemSize) - navBtnW;
-        
-        // Create search field
-        TextRenderer textRenderer = client.textRenderer;
-        searchField = new TextFieldWidget(textRenderer, searchBoxX + 2, searchBoxY + 3, searchBoxW - 4, searchBoxH - 6, Text.literal("Search"));
-        searchField.setDrawsBackground(false);
-        searchField.setPlaceholder(Text.literal("Search EMI..."));
-        searchField.setChangedListener(this::onSearchChanged);
-        searchField.setMaxLength(256);
+        this.navRightX = this.gridX + panelW - navBtnW;
         
         // Load all items except air
         allItems = new ArrayList<>();
@@ -89,22 +97,26 @@ public class ItemPanelWidget {
         filteredItems = new ArrayList<>(allItems);
     }
     
-    private void onSearchChanged(String query) {
-        String lowerQuery = query.toLowerCase();
+    private void updateFilter() {
+        String lowerQuery = searchQuery.toLowerCase();
         filteredItems.clear();
-        for (Item item : allItems) {
-            if (item.getName().getString().toLowerCase().contains(lowerQuery)) {
-                filteredItems.add(item);
+        if (lowerQuery.isEmpty()) {
+            filteredItems.addAll(allItems);
+        } else {
+            for (Item item : allItems) {
+                if (item.getName().getString().toLowerCase().contains(lowerQuery)) {
+                    filteredItems.add(item);
+                }
             }
         }
         page = 0;
     }
     
     private void drawBorder(DrawContext context, int x, int y, int w, int h, int color) {
-        context.fill(x, y, x + w, y + 1, color);             // top
-        context.fill(x, y + h - 1, x + w, y + h, color);     // bottom
-        context.fill(x, y + 1, x + 1, y + h - 1, color);     // left
-        context.fill(x + w - 1, y + 1, x + w, y + h - 1, color); // right
+        context.fill(x, y, x + w, y + 1, color);
+        context.fill(x, y + h - 1, x + w, y + h, color);
+        context.fill(x, y + 1, x + 1, y + h - 1, color);
+        context.fill(x + w - 1, y + 1, x + w, y + h - 1, color);
     }
     
     private int getMaxPage() {
@@ -114,68 +126,80 @@ public class ItemPanelWidget {
     }
     
     public void render(DrawContext context, int mouseX, int mouseY, float delta) {
+        searchCursorTick++;
         int itemsPerPage = columns * rows;
         if (itemsPerPage <= 0) return;
         
         int maxPage = getMaxPage();
         if (page > maxPage) page = maxPage;
         
-        int panelW = columns * itemSize;
+        TextRenderer tr = client.textRenderer;
         
-        // ── Search Bar (bottom center) ──
-        context.fill(searchBoxX, searchBoxY, searchBoxX + searchBoxW, searchBoxY + searchBoxH, 0xDD000000);
-        drawBorder(context, searchBoxX, searchBoxY, searchBoxW, searchBoxH, 0xFF666666);
-        searchField.render(context, mouseX, mouseY, delta);
+        // ── Panel Background (subtle slate tint) ──
+        int panelBot = gridY + (rows * itemSize);
+        context.fill(gridX - 2, headerY, gridX + panelW + 2, panelBot + 2, BG_PANEL);
         
-        // ── Panel Background ──
-        int panelTop = headerY;
-        int panelBot = gridY + (rows * itemSize) + 2;
-        context.fill(gridX - 2, panelTop, gridX + panelW + 2, panelBot, 0x90000000);
+        // ── Navigation Header Bar ──
+        int hx = gridX - 2;
+        int hw = panelW + 4;
+        context.fill(hx, headerY, hx + hw, headerY + headerH, BG_HEADER);
+        drawBorder(context, hx, headerY, hw, headerH, BORDER_COLOR);
         
-        // ── Navigation Header ──
-        // Left arrow button
-        boolean leftHover = mouseX >= navLeftX && mouseX < navLeftX + navBtnW && mouseY >= headerY && mouseY < headerY + navBtnH;
-        context.fill(navLeftX, headerY, navLeftX + navBtnW, headerY + navBtnH, leftHover ? 0xA0FFFFFF : 0x60000000);
-        drawBorder(context, navLeftX, headerY, navBtnW, navBtnH, 0xFF888888);
-        context.drawCenteredTextWithShadow(client.textRenderer, "\u25C0", navLeftX + navBtnW / 2, headerY + 2, page > 0 ? 0xFFFFFF : 0x666666);
+        // Left arrow button ◀
+        int lbx = gridX + 1;
+        int lby = headerY + 1;
+        boolean leftHover = mouseX >= lbx && mouseX < lbx + navBtnW && mouseY >= lby && mouseY < lby + navBtnH;
+        context.fill(lbx, lby, lbx + navBtnW, lby + navBtnH, leftHover ? NAV_BTN_HOVER : NAV_BTN_BG);
+        drawBorder(context, lbx, lby, navBtnW, navBtnH, BORDER_COLOR);
+        context.drawCenteredTextWithShadow(tr, "\u25C0", lbx + navBtnW / 2, lby + 3, page > 0 ? 0xFFFFFF : 0x666666);
         
-        // Right arrow button
-        boolean rightHover = mouseX >= navRightX && mouseX < navRightX + navBtnW && mouseY >= headerY && mouseY < headerY + navBtnH;
-        context.fill(navRightX, headerY, navRightX + navBtnW, headerY + navBtnH, rightHover ? 0xA0FFFFFF : 0x60000000);
-        drawBorder(context, navRightX, headerY, navBtnW, navBtnH, 0xFF888888);
-        context.drawCenteredTextWithShadow(client.textRenderer, "\u25B6", navRightX + navBtnW / 2, headerY + 2, page < maxPage ? 0xFFFFFF : 0x666666);
+        // Right arrow button ▶
+        int rbx = gridX + panelW - navBtnW - 1;
+        int rby = headerY + 1;
+        boolean rightHover = mouseX >= rbx && mouseX < rbx + navBtnW && mouseY >= rby && mouseY < rby + navBtnH;
+        context.fill(rbx, rby, rbx + navBtnW, rby + navBtnH, rightHover ? NAV_BTN_HOVER : NAV_BTN_BG);
+        drawBorder(context, rbx, rby, navBtnW, navBtnH, BORDER_COLOR);
+        context.drawCenteredTextWithShadow(tr, "\u25B6", rbx + navBtnW / 2, rby + 3, page < maxPage ? 0xFFFFFF : 0x666666);
         
-        // Page text between arrows
-        String pageText = (page + 1) + " / " + (maxPage + 1);
-        int centerX = navLeftX + navBtnW + ((navRightX - (navLeftX + navBtnW)) / 2);
-        context.drawCenteredTextWithShadow(client.textRenderer, pageText, centerX, headerY + 2, 0xFFFFFF);
+        // Search icon 🔍 (simple "S" icon next to left button)
+        int searchIconX = lbx + navBtnW + 4;
+        context.drawTextWithShadow(tr, "\u26B2", searchIconX, headerY + 4, 0xCCCCCC);
         
-        // ── Item Grid with checkerboard ──
+        // Page text "Page X of Y" centered
+        String pageText = "Page " + (page + 1) + " of " + (maxPage + 1);
+        int centerX = gridX + panelW / 2;
+        context.drawCenteredTextWithShadow(tr, pageText, centerX, headerY + 4, 0xFFFFFF);
+        
+        // Progress bar under page text
+        if (maxPage > 0) {
+            int barW = Math.min(60, panelW / 2);
+            int barX = centerX - barW / 2;
+            int barY = headerY + headerH - 3;
+            context.fill(barX, barY, barX + barW, barY + 2, 0x40FFFFFF); // Track
+            int fillW = (int)(barW * ((double)(page) / maxPage));
+            context.fill(barX, barY, barX + fillW, barY + 2, 0xFFFFFFFF); // Fill
+        }
+        
+        // ── Checkerboard Item Grid ──
+        for (int row = 0; row < rows; row++) {
+            for (int col = 0; col < columns; col++) {
+                int slotX = gridX + col * itemSize;
+                int slotY = gridY + row * itemSize;
+                boolean dark = (row + col) % 2 == 0;
+                context.fill(slotX, slotY, slotX + itemSize, slotY + itemSize, dark ? BG_SLOT_DARK : BG_SLOT_LIGHT);
+            }
+        }
+        
+        // Draw items
         int start = page * itemsPerPage;
         int end = Math.min(start + itemsPerPage, filteredItems.size());
         
         int currentX = gridX;
         int currentY = gridY;
-        
-        // Draw checkerboard backgrounds first
-        for (int row = 0; row < rows; row++) {
-            for (int col = 0; col < columns; col++) {
-                int slotX = gridX + col * itemSize;
-                int slotY = gridY + row * itemSize;
-                // Alternating light/dark
-                boolean dark = (row + col) % 2 == 0;
-                context.fill(slotX, slotY, slotX + itemSize, slotY + itemSize, dark ? 0x30000000 : 0x18FFFFFF);
-            }
-        }
-        
-        // Draw items
-        currentX = gridX;
-        currentY = gridY;
         for (int i = start; i < end; i++) {
             Item item = filteredItems.get(i);
             ItemStack stack = item.getDefaultStack();
             
-            // Draw item icon centered in slot
             int iconX = currentX + 1;
             int iconY = currentY + 1;
             context.drawItem(stack, iconX, iconY);
@@ -192,7 +216,25 @@ public class ItemPanelWidget {
             }
         }
         
-        // ── Tooltip for hovered item ──
+        // ── Search Bar (bottom center, manual rendering) ──
+        context.fill(searchBoxX, searchBoxY, searchBoxX + searchBoxW, searchBoxY + searchBoxH, BG_SEARCH);
+        drawBorder(context, searchBoxX, searchBoxY, searchBoxW, searchBoxH, searchFocused ? 0xFFFFFFFF : BORDER_COLOR);
+        
+        String displayText;
+        if (searchQuery.isEmpty() && !searchFocused) {
+            displayText = "Search...";
+            context.drawTextWithShadow(tr, displayText, searchBoxX + 4, searchBoxY + 3, 0x888888);
+        } else {
+            displayText = searchQuery;
+            context.drawTextWithShadow(tr, displayText, searchBoxX + 4, searchBoxY + 3, 0xFFFFFF);
+            // Blinking cursor
+            if (searchFocused && (searchCursorTick / 10) % 2 == 0) {
+                int cursorX = searchBoxX + 4 + tr.getWidth(displayText);
+                context.fill(cursorX, searchBoxY + 2, cursorX + 1, searchBoxY + searchBoxH - 2, 0xFFFFFFFF);
+            }
+        }
+        
+        // ── Tooltip for hovered item (draw last so it's on top) ──
         Item hovered = getHoveredItem(mouseX, mouseY);
         if (hovered != null) {
             ItemStack hoveredStack = hovered.getDefaultStack();
@@ -206,27 +248,31 @@ public class ItemPanelWidget {
         
         // Handle search bar click
         if (mouseX >= searchBoxX && mouseX <= searchBoxX + searchBoxW && mouseY >= searchBoxY && mouseY <= searchBoxY + searchBoxH) {
-            searchField.setFocused(true);
-            searchField.mouseClicked(click, doubleClick);
+            searchFocused = true;
             return true;
         } else {
-            searchField.setFocused(false);
+            searchFocused = false;
         }
         
-        // Handle page navigation clicks
-        if (mouseX >= navLeftX && mouseX < navLeftX + navBtnW && mouseY >= headerY && mouseY < headerY + navBtnH) {
+        // Handle left arrow
+        int lbx = gridX + 1;
+        int lby = headerY + 1;
+        if (mouseX >= lbx && mouseX < lbx + navBtnW && mouseY >= lby && mouseY < lby + navBtnH) {
             if (page > 0) page--;
             return true;
         }
-        if (mouseX >= navRightX && mouseX < navRightX + navBtnW && mouseY >= headerY && mouseY < headerY + navBtnH) {
+        
+        // Handle right arrow
+        int rbx = gridX + panelW - navBtnW - 1;
+        int rby = headerY + 1;
+        if (mouseX >= rbx && mouseX < rbx + navBtnW && mouseY >= rby && mouseY < rby + navBtnH) {
             if (page < getMaxPage()) page++;
             return true;
         }
         
-        // Handle clicking an item in the grid → open recipe viewer
+        // Handle clicking an item → open recipe viewer
         Item clickedItem = getHoveredItem(mouseX, mouseY);
         if (clickedItem != null && click.button() == 0) {
-            // Left click → show recipes that OUTPUT this item (like pressing R)
             java.util.List<net.minecraft.recipe.RecipeEntry<?>> recipes =
                 com.example.client.recipe.RecipeIndexer.getRecipesForOutput(clickedItem);
             if (!recipes.isEmpty() && client.currentScreen != null) {
@@ -239,7 +285,6 @@ public class ItemPanelWidget {
     }
     
     public boolean mouseScrolled(double mouseX, double mouseY, double horizontalAmount, double verticalAmount) {
-        int panelW = columns * itemSize;
         int panelBot = gridY + (rows * itemSize);
         if (mouseX >= gridX - 2 && mouseX <= gridX + panelW + 2 && mouseY >= headerY && mouseY <= panelBot) {
             if (verticalAmount > 0 && page > 0) {
@@ -254,21 +299,40 @@ public class ItemPanelWidget {
     }
     
     public boolean keyPressed(KeyInput keyInput) {
-        if (searchField.isFocused()) {
-            return searchField.keyPressed(keyInput);
+        int keyCode = keyInput.key();
+        if (searchFocused) {
+            if (keyCode == GLFW.GLFW_KEY_BACKSPACE) {
+                if (!searchQuery.isEmpty()) {
+                    searchQuery = searchQuery.substring(0, searchQuery.length() - 1);
+                    updateFilter();
+                }
+                return true;
+            } else if (keyCode == GLFW.GLFW_KEY_ESCAPE) {
+                searchFocused = false;
+                return true;
+            } else if (keyCode == GLFW.GLFW_KEY_ENTER) {
+                searchFocused = false;
+                return true;
+            }
+            // Consume all other key presses when focused to prevent E closing inventory etc.
+            return true;
         }
         return false;
     }
     
     public boolean charTyped(CharInput charInput) {
-        if (searchField.isFocused()) {
-            return searchField.charTyped(charInput);
+        if (searchFocused) {
+            char c = (char) charInput.codepoint();
+            if (c >= 32) { // Printable characters
+                searchQuery += c;
+                updateFilter();
+                return true;
+            }
         }
         return false;
     }
 
     public Item getHoveredItem(double mouseX, double mouseY) {
-        int panelW = columns * itemSize;
         int panelH = rows * itemSize;
         if (mouseX < gridX || mouseX >= gridX + panelW || mouseY < gridY || mouseY >= gridY + panelH) {
             return null;
@@ -289,6 +353,6 @@ public class ItemPanelWidget {
     }
     
     public boolean isSearchFocused() {
-        return searchField.isFocused();
+        return searchFocused;
     }
 }
