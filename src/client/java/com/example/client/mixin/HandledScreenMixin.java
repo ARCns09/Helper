@@ -16,7 +16,7 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 import org.lwjgl.glfw.GLFW;
 
 @Mixin(HandledScreen.class)
-public abstract class HandledScreenMixin extends Screen {
+public abstract class HandledScreenMixin extends Screen implements HelperWidgetAccessor {
 
     @Shadow protected int x;
     @Shadow protected int y;
@@ -26,6 +26,11 @@ public abstract class HandledScreenMixin extends Screen {
 
     @Unique
     private ItemPanelWidget helper$itemPanelWidget;
+
+    @Override
+    public ItemPanelWidget helper$getWidget() {
+        return this.helper$itemPanelWidget;
+    }
 
     protected HandledScreenMixin(Text title) {
         super(title);
@@ -103,15 +108,6 @@ public abstract class HandledScreenMixin extends Screen {
                 }
                 
                 this.client.setScreen(new com.example.client.ui.RecipePopupScreen(this, recipes));
-                cir.setReturnValue(true);
-            }
-        }
-    }
-
-    @Inject(method = "charTyped", at = @At("HEAD"), cancellable = true)
-    private void helper$onCharTyped(char chr, int modifiers, CallbackInfoReturnable<Boolean> cir) {
-        if (this.helper$itemPanelWidget != null && HelperConfig.getInstance().enableSidePanel) {
-            if (this.helper$itemPanelWidget.charTyped(chr, modifiers)) {
                 cir.setReturnValue(true);
             }
         }
