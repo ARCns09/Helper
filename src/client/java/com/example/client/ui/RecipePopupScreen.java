@@ -47,7 +47,8 @@ public class RecipePopupScreen extends Screen {
         context.drawCenteredTextWithShadow(this.textRenderer, "Press ESC to close, Left/Right arrows to navigate.", this.width / 2, this.height - 20, 0x888888);
     }
 
-    public boolean keyPressed(int keyCode, int scanCode, int modifiers) {
+    public boolean keyPressed(net.minecraft.client.input.KeyInput keyInput) {
+        int keyCode = keyInput.key();
         if (keyCode == 256) { // ESC
             if (this.client != null) {
                 this.client.setScreen(parent);
@@ -60,6 +61,6 @@ public class RecipePopupScreen extends Screen {
             if (currentIndex > 0) currentIndex--;
             return true;
         }
-        return false;
+        return super.keyPressed(keyInput);
     }
 }

@@ -1,5 +1,6 @@
 package com.example.client.mixin;
 
+import com.example.client.accessor.HelperWidgetAccessor;
 import com.example.client.config.HelperConfig;
 import com.example.client.ui.ItemPanelWidget;
 import net.minecraft.client.gui.DrawContext;
@@ -52,9 +53,9 @@ public abstract class HandledScreenMixin extends Screen implements HelperWidgetA
     }
 
     @Inject(method = "mouseClicked", at = @At("HEAD"), cancellable = true)
-    private void helper$onMouseClicked(double mouseX, double mouseY, int button, CallbackInfoReturnable<Boolean> cir) {
+    private void helper$onMouseClicked(net.minecraft.client.gui.Click click, boolean doubleClick, CallbackInfoReturnable<Boolean> cir) {
         if (this.helper$itemPanelWidget != null && HelperConfig.getInstance().enableSidePanel) {
-            if (this.helper$itemPanelWidget.mouseClicked(mouseX, mouseY, button)) {
+            if (this.helper$itemPanelWidget.mouseClicked(click, doubleClick)) {
                 cir.setReturnValue(true);
             }
         }
@@ -70,9 +71,13 @@ public abstract class HandledScreenMixin extends Screen implements HelperWidgetA
     }
 
     @Inject(method = "keyPressed", at = @At("HEAD"), cancellable = true)
-    private void helper$onKeyPressed(int keyCode, int scanCode, int modifiers, CallbackInfoReturnable<Boolean> cir) {
+    private void helper$onKeyPressed(net.minecraft.client.input.KeyInput keyInput, CallbackInfoReturnable<Boolean> cir) {
+        int keyCode = keyInput.key();
+        int scanCode = keyInput.scancode();
+        int modifiers = keyInput.modifiers();
+
         if (this.helper$itemPanelWidget != null && HelperConfig.getInstance().enableSidePanel) {
-            if (this.helper$itemPanelWidget.keyPressed(keyCode, scanCode, modifiers)) {
+            if (this.helper$itemPanelWidget.keyPressed(keyInput)) {
                 cir.setReturnValue(true);
             }
         }

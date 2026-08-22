@@ -1,4 +1,4 @@
-package com.example.client.mixin;
+package com.example.client.accessor;
 
 import com.example.client.ui.ItemPanelWidget;
 
