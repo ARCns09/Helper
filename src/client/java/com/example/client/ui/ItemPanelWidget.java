@@ -18,50 +18,74 @@ import java.util.List;
 public class ItemPanelWidget {
     private final MinecraftClient client;
     
-    private int gridX, gridY, gridWidth, gridHeight;
+    // Grid positioning (computed dynamically)
+    private int gridX, gridY;
     private final int itemSize = 18; 
     private int columns;
     private int rows;
+    private int screenWidth, screenHeight;
     
+    // Search field
     private TextFieldWidget searchField;
+    private int searchBoxX, searchBoxY, searchBoxW, searchBoxH;
+    
     private List<Item> allItems;
     private List<Item> filteredItems;
     
     private int page = 0;
     
-    // Header navigation bounds
-    private int leftArrowX, rightArrowX, arrowY, arrowWidth, arrowHeight;
+    // Navigation header bounds
+    private int headerY;
+    private int navLeftX, navRightX, navBtnW, navBtnH;
     
     public ItemPanelWidget(int screenWidth, int screenHeight, int guiRight, int guiTop, int guiHeight) {
         this.client = MinecraftClient.getInstance();
+        this.screenWidth = screenWidth;
+        this.screenHeight = screenHeight;
         
-        this.gridX = guiRight + 6;
-        this.gridY = 8;
-        this.gridWidth = screenWidth - this.gridX - 6;
-        this.gridHeight = screenHeight - 48; // Leave space for bottom search bar
+        // Grid starts right after inventory, fills to screen edge
+        // Leave 2px margin on sides
+        this.gridX = guiRight + 4;
+        int availWidth = screenWidth - this.gridX - 2;
+        this.columns = Math.max(1, availWidth / itemSize);
         
-        this.columns = Math.max(1, this.gridWidth / itemSize);
-        this.rows = Math.max(1, (this.gridHeight - 20) / itemSize); // 20px for header
+        // Header at top of panel area (2px from screen top)
+        this.headerY = 2;
+        this.navBtnW = 12;
+        this.navBtnH = 12;
         
-        // Navigation bounds
-        this.arrowWidth = 14;
-        this.arrowHeight = 14;
-        this.arrowY = this.gridY;
-        this.leftArrowX = this.gridX;
-        this.rightArrowX = this.gridX + (this.columns * itemSize) - this.arrowWidth;
+        // Grid starts below header
+        this.gridY = this.headerY + navBtnH + 4;
         
-        int searchWidth = 240;
-        int searchX = (screenWidth - searchWidth) / 2;
-        int searchY = screenHeight - 24;
+        // Search bar at bottom: centered, 20px from bottom
+        this.searchBoxW = Math.min(200, screenWidth - 20);
+        this.searchBoxH = 16;
+        this.searchBoxX = (screenWidth - searchBoxW) / 2;
+        this.searchBoxY = screenHeight - searchBoxH - 4;
         
+        // Available rows between grid top and search bar
+        int availHeight = this.searchBoxY - 4 - this.gridY;
+        this.rows = Math.max(1, availHeight / itemSize);
+        
+        // Navigation button positions
+        this.navLeftX = this.gridX;
+        this.navRightX = this.gridX + (this.columns * itemSize) - navBtnW;
+        
+        // Create search field
         TextRenderer textRenderer = client.textRenderer;
-        searchField = new TextFieldWidget(textRenderer, searchX + 4, searchY + 4, searchWidth - 8, 12, Text.literal("Search"));
+        searchField = new TextFieldWidget(textRenderer, searchBoxX + 2, searchBoxY + 3, searchBoxW - 4, searchBoxH - 6, Text.literal("Search"));
         searchField.setDrawsBackground(false);
         searchField.setPlaceholder(Text.literal("Search EMI..."));
         searchField.setChangedListener(this::onSearchChanged);
+        searchField.setMaxLength(256);
         
+        // Load all items except air
         allItems = new ArrayList<>();
-        Registries.ITEM.forEach(allItems::add);
+        Registries.ITEM.forEach(item -> {
+            if (item != net.minecraft.item.Items.AIR) {
+                allItems.add(item);
+            }
+        });
         filteredItems = new ArrayList<>(allItems);
     }
     
@@ -76,58 +100,89 @@ public class ItemPanelWidget {
         page = 0;
     }
     
-    private void drawBorder(DrawContext context, int x, int y, int width, int height, int color) {
-        context.fill(x, y, x + width, y + 1, color);
-        context.fill(x, y + height - 1, x + width, y + height, color);
-        context.fill(x, y + 1, x + 1, y + height - 1, color);
-        context.fill(x + width - 1, y + 1, x + width, y + height - 1, color);
+    private void drawBorder(DrawContext context, int x, int y, int w, int h, int color) {
+        context.fill(x, y, x + w, y + 1, color);             // top
+        context.fill(x, y + h - 1, x + w, y + h, color);     // bottom
+        context.fill(x, y + 1, x + 1, y + h - 1, color);     // left
+        context.fill(x + w - 1, y + 1, x + w, y + h - 1, color); // right
+    }
+    
+    private int getMaxPage() {
+        int itemsPerPage = columns * rows;
+        if (itemsPerPage <= 0) return 0;
+        return Math.max(0, (filteredItems.size() - 1) / itemsPerPage);
     }
     
     public void render(DrawContext context, int mouseX, int mouseY, float delta) {
         int itemsPerPage = columns * rows;
         if (itemsPerPage <= 0) return;
         
-        int maxPage = Math.max(0, (filteredItems.size() - 1) / itemsPerPage);
+        int maxPage = getMaxPage();
         if (page > maxPage) page = maxPage;
         
-        // Render Search Bar background (EMI style)
-        int searchWidth = 240;
-        int searchX = (client.getWindow().getScaledWidth() - searchWidth) / 2;
-        int searchY = client.getWindow().getScaledHeight() - 24;
-        context.fill(searchX, searchY, searchX + searchWidth, searchY + 18, 0xCC000000); // Dark background
-        drawBorder(context, searchX, searchY, searchWidth, 18, 0xFF555555); // Gray border
+        int panelW = columns * itemSize;
         
+        // ── Search Bar (bottom center) ──
+        context.fill(searchBoxX, searchBoxY, searchBoxX + searchBoxW, searchBoxY + searchBoxH, 0xDD000000);
+        drawBorder(context, searchBoxX, searchBoxY, searchBoxW, searchBoxH, 0xFF666666);
         searchField.render(context, mouseX, mouseY, delta);
         
-        // Render Right Panel Top Navigation
-        boolean leftHover = mouseX >= leftArrowX && mouseX < leftArrowX + arrowWidth && mouseY >= arrowY && mouseY < arrowY + arrowHeight;
-        boolean rightHover = mouseX >= rightArrowX && mouseX < rightArrowX + arrowWidth && mouseY >= arrowY && mouseY < arrowY + arrowHeight;
+        // ── Panel Background ──
+        int panelTop = headerY;
+        int panelBot = gridY + (rows * itemSize) + 2;
+        context.fill(gridX - 2, panelTop, gridX + panelW + 2, panelBot, 0x90000000);
         
-        context.fill(leftArrowX, arrowY, leftArrowX + arrowWidth, arrowY + arrowHeight, leftHover ? 0x80FFFFFF : 0x40000000);
-        context.fill(rightArrowX, arrowY, rightArrowX + arrowWidth, arrowY + arrowHeight, rightHover ? 0x80FFFFFF : 0x40000000);
+        // ── Navigation Header ──
+        // Left arrow button
+        boolean leftHover = mouseX >= navLeftX && mouseX < navLeftX + navBtnW && mouseY >= headerY && mouseY < headerY + navBtnH;
+        context.fill(navLeftX, headerY, navLeftX + navBtnW, headerY + navBtnH, leftHover ? 0xA0FFFFFF : 0x60000000);
+        drawBorder(context, navLeftX, headerY, navBtnW, navBtnH, 0xFF888888);
+        context.drawCenteredTextWithShadow(client.textRenderer, "\u25C0", navLeftX + navBtnW / 2, headerY + 2, page > 0 ? 0xFFFFFF : 0x666666);
         
-        context.drawCenteredTextWithShadow(client.textRenderer, "<", leftArrowX + arrowWidth / 2, arrowY + 3, 0xFFFFFF);
-        context.drawCenteredTextWithShadow(client.textRenderer, ">", rightArrowX + arrowWidth / 2, arrowY + 3, 0xFFFFFF);
+        // Right arrow button
+        boolean rightHover = mouseX >= navRightX && mouseX < navRightX + navBtnW && mouseY >= headerY && mouseY < headerY + navBtnH;
+        context.fill(navRightX, headerY, navRightX + navBtnW, headerY + navBtnH, rightHover ? 0xA0FFFFFF : 0x60000000);
+        drawBorder(context, navRightX, headerY, navBtnW, navBtnH, 0xFF888888);
+        context.drawCenteredTextWithShadow(client.textRenderer, "\u25B6", navRightX + navBtnW / 2, headerY + 2, page < maxPage ? 0xFFFFFF : 0x666666);
         
-        String pageText = "Page " + (page + 1) + " of " + (maxPage + 1);
-        int pageTextX = leftArrowX + arrowWidth + ((rightArrowX - (leftArrowX + arrowWidth)) / 2);
-        context.drawCenteredTextWithShadow(client.textRenderer, pageText, pageTextX, arrowY + 3, 0xFFFFFF);
+        // Page text between arrows
+        String pageText = (page + 1) + " / " + (maxPage + 1);
+        int centerX = navLeftX + navBtnW + ((navRightX - (navLeftX + navBtnW)) / 2);
+        context.drawCenteredTextWithShadow(client.textRenderer, pageText, centerX, headerY + 2, 0xFFFFFF);
         
-        // Render Grid
+        // ── Item Grid with checkerboard ──
         int start = page * itemsPerPage;
         int end = Math.min(start + itemsPerPage, filteredItems.size());
         
         int currentX = gridX;
-        int currentY = gridY + 20; // Below header
+        int currentY = gridY;
         
+        // Draw checkerboard backgrounds first
+        for (int row = 0; row < rows; row++) {
+            for (int col = 0; col < columns; col++) {
+                int slotX = gridX + col * itemSize;
+                int slotY = gridY + row * itemSize;
+                // Alternating light/dark
+                boolean dark = (row + col) % 2 == 0;
+                context.fill(slotX, slotY, slotX + itemSize, slotY + itemSize, dark ? 0x30000000 : 0x18FFFFFF);
+            }
+        }
+        
+        // Draw items
+        currentX = gridX;
+        currentY = gridY;
         for (int i = start; i < end; i++) {
             Item item = filteredItems.get(i);
             ItemStack stack = item.getDefaultStack();
             
-            context.drawItem(stack, currentX, currentY);
-            if (mouseX >= currentX && mouseX < currentX + 16 && mouseY >= currentY && mouseY < currentY + 16) {
-                // Highlight hovered item (EMI style light highlight)
-                context.fill(currentX, currentY, currentX + 16, currentY + 16, 0x40FFFFFF);
+            // Draw item icon centered in slot
+            int iconX = currentX + 1;
+            int iconY = currentY + 1;
+            context.drawItem(stack, iconX, iconY);
+            
+            // Hover highlight
+            if (mouseX >= currentX && mouseX < currentX + itemSize && mouseY >= currentY && mouseY < currentY + itemSize) {
+                context.fill(currentX, currentY, currentX + itemSize, currentY + itemSize, 0x50FFFFFF);
             }
             
             currentX += itemSize;
@@ -136,18 +191,21 @@ public class ItemPanelWidget {
                 currentY += itemSize;
             }
         }
+        
+        // ── Tooltip for hovered item ──
+        Item hovered = getHoveredItem(mouseX, mouseY);
+        if (hovered != null) {
+            ItemStack hoveredStack = hovered.getDefaultStack();
+            context.drawItemTooltip(client.textRenderer, hoveredStack, mouseX, mouseY);
+        }
     }
     
     public boolean mouseClicked(Click click, boolean doubleClick) {
         double mouseX = click.x();
         double mouseY = click.y();
         
-        // Handle search bar focus
-        int searchWidth = 240;
-        int searchX = (client.getWindow().getScaledWidth() - searchWidth) / 2;
-        int searchY = client.getWindow().getScaledHeight() - 24;
-        
-        if (mouseX >= searchX && mouseX <= searchX + searchWidth && mouseY >= searchY && mouseY <= searchY + 18) {
+        // Handle search bar click
+        if (mouseX >= searchBoxX && mouseX <= searchBoxX + searchBoxW && mouseY >= searchBoxY && mouseY <= searchBoxY + searchBoxH) {
             searchField.setFocused(true);
             searchField.mouseClicked(click, doubleClick);
             return true;
@@ -156,15 +214,24 @@ public class ItemPanelWidget {
         }
         
         // Handle page navigation clicks
-        if (mouseX >= leftArrowX && mouseX < leftArrowX + arrowWidth && mouseY >= arrowY && mouseY < arrowY + arrowHeight) {
+        if (mouseX >= navLeftX && mouseX < navLeftX + navBtnW && mouseY >= headerY && mouseY < headerY + navBtnH) {
             if (page > 0) page--;
             return true;
         }
+        if (mouseX >= navRightX && mouseX < navRightX + navBtnW && mouseY >= headerY && mouseY < headerY + navBtnH) {
+            if (page < getMaxPage()) page++;
+            return true;
+        }
         
-        if (mouseX >= rightArrowX && mouseX < rightArrowX + arrowWidth && mouseY >= arrowY && mouseY < arrowY + arrowHeight) {
-            int itemsPerPage = columns * rows;
-            int maxPage = (filteredItems.size() - 1) / itemsPerPage;
-            if (page < maxPage) page++;
+        // Handle clicking an item in the grid → open recipe viewer
+        Item clickedItem = getHoveredItem(mouseX, mouseY);
+        if (clickedItem != null && click.button() == 0) {
+            // Left click → show recipes that OUTPUT this item (like pressing R)
+            java.util.List<net.minecraft.recipe.RecipeEntry<?>> recipes =
+                com.example.client.recipe.RecipeIndexer.getRecipesForOutput(clickedItem);
+            if (!recipes.isEmpty() && client.currentScreen != null) {
+                client.setScreen(new RecipePopupScreen(client.currentScreen, recipes));
+            }
             return true;
         }
         
@@ -172,17 +239,15 @@ public class ItemPanelWidget {
     }
     
     public boolean mouseScrolled(double mouseX, double mouseY, double horizontalAmount, double verticalAmount) {
-        if (mouseX >= gridX && mouseX <= gridX + (columns * itemSize) && mouseY >= gridY && mouseY <= gridY + gridHeight) {
+        int panelW = columns * itemSize;
+        int panelBot = gridY + (rows * itemSize);
+        if (mouseX >= gridX - 2 && mouseX <= gridX + panelW + 2 && mouseY >= headerY && mouseY <= panelBot) {
             if (verticalAmount > 0 && page > 0) {
                 page--;
                 return true;
-            } else if (verticalAmount < 0) {
-                int itemsPerPage = columns * rows;
-                int maxPage = (filteredItems.size() - 1) / itemsPerPage;
-                if (page < maxPage) {
-                    page++;
-                    return true;
-                }
+            } else if (verticalAmount < 0 && page < getMaxPage()) {
+                page++;
+                return true;
             }
         }
         return false;
@@ -203,29 +268,27 @@ public class ItemPanelWidget {
     }
 
     public Item getHoveredItem(double mouseX, double mouseY) {
-        if (mouseX < gridX || mouseX >= gridX + (columns * itemSize) || mouseY < gridY + 20 || mouseY >= gridY + 20 + (rows * itemSize)) {
+        int panelW = columns * itemSize;
+        int panelH = rows * itemSize;
+        if (mouseX < gridX || mouseX >= gridX + panelW || mouseY < gridY || mouseY >= gridY + panelH) {
             return null;
         }
         
+        int col = (int)((mouseX - gridX) / itemSize);
+        int row = (int)((mouseY - gridY) / itemSize);
+        
+        if (col < 0 || col >= columns || row < 0 || row >= rows) return null;
+        
         int itemsPerPage = columns * rows;
-        if (itemsPerPage <= 0) return null;
+        int index = page * itemsPerPage + row * columns + col;
         
-        int start = page * itemsPerPage;
-        int end = Math.min(start + itemsPerPage, filteredItems.size());
-        
-        int currentX = gridX;
-        int currentY = gridY + 20;
-        
-        for (int i = start; i < end; i++) {
-            if (mouseX >= currentX && mouseX < currentX + 16 && mouseY >= currentY && mouseY < currentY + 16) {
-                return filteredItems.get(i);
-            }
-            currentX += itemSize;
-            if ((i - start + 1) % columns == 0) {
-                currentX = gridX;
-                currentY += itemSize;
-            }
+        if (index >= 0 && index < filteredItems.size()) {
+            return filteredItems.get(index);
         }
         return null;
+    }
+    
+    public boolean isSearchFocused() {
+        return searchField.isFocused();
     }
 }

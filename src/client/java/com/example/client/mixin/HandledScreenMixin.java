@@ -6,6 +6,7 @@ import com.example.client.ui.ItemPanelWidget;
 import net.minecraft.client.gui.DrawContext;
 import net.minecraft.client.gui.screen.Screen;
 import net.minecraft.client.gui.screen.ingame.HandledScreen;
+import net.minecraft.client.input.CharInput;
 import net.minecraft.text.Text;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Shadow;
@@ -73,15 +74,17 @@ public abstract class HandledScreenMixin extends Screen implements HelperWidgetA
     @Inject(method = "keyPressed", at = @At("HEAD"), cancellable = true)
     private void helper$onKeyPressed(net.minecraft.client.input.KeyInput keyInput, CallbackInfoReturnable<Boolean> cir) {
         int keyCode = keyInput.key();
-        int scanCode = keyInput.scancode();
         int modifiers = keyInput.modifiers();
 
+        // Let search field consume keys first
         if (this.helper$itemPanelWidget != null && HelperConfig.getInstance().enableSidePanel) {
             if (this.helper$itemPanelWidget.keyPressed(keyInput)) {
                 cir.setReturnValue(true);
+                return;
             }
         }
         
+        // Toggle side panel with Ctrl+O
         if (keyCode == GLFW.GLFW_KEY_O && (modifiers & GLFW.GLFW_MOD_CONTROL) != 0) {
             HelperConfig.getInstance().enableSidePanel = !HelperConfig.getInstance().enableSidePanel;
             HelperConfig.save();
@@ -93,6 +96,12 @@ public abstract class HandledScreenMixin extends Screen implements HelperWidgetA
             return;
         }
 
+        // Don't process R/U when search is focused (user is typing)
+        if (this.helper$itemPanelWidget != null && this.helper$itemPanelWidget.isSearchFocused()) {
+            return;
+        }
+
+        // Recipe lookups
         if (keyCode == GLFW.GLFW_KEY_R || keyCode == GLFW.GLFW_KEY_U) {
             net.minecraft.item.Item hoveredItem = null;
             if (this.helper$itemPanelWidget != null && HelperConfig.getInstance().enableSidePanel) {
@@ -116,5 +125,18 @@ public abstract class HandledScreenMixin extends Screen implements HelperWidgetA
                 cir.setReturnValue(true);
             }
         }
+    }
+
+    // Override charTyped to intercept character input for the search bar.
+    // Since HandledScreen doesn't override charTyped, we implement it here.
+    // The mixin merges this into HandledScreen, overriding the inherited default.
+    @Override
+    public boolean charTyped(CharInput charInput) {
+        if (this.helper$itemPanelWidget != null && HelperConfig.getInstance().enableSidePanel) {
+            if (this.helper$itemPanelWidget.charTyped(charInput)) {
+                return true;
+            }
+        }
+        return super.charTyped(charInput);
     }
 }
