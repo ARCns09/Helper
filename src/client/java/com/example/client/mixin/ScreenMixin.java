@@ -14,7 +14,7 @@ public class ScreenMixin {
     @Inject(method = "charTyped", at = @At("HEAD"), cancellable = true)
     private void helper$onCharTyped(char chr, int modifiers, CallbackInfoReturnable<Boolean> cir) {
         if ((Object) this instanceof HandledScreen) {
-            ItemPanelWidget widget = HandledScreenAccessor.getHelperWidget((HandledScreen<?>)(Object)this);
+            ItemPanelWidget widget = ((HelperWidgetAccessor) this).helper$getWidget();
             if (widget != null && HelperConfig.getInstance().enableSidePanel) {
                 if (widget.charTyped(chr, modifiers)) {
                     cir.setReturnValue(true);
