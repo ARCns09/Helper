@@ -46,30 +46,7 @@ public abstract class HandledScreenMixin extends Screen implements HelperWidgetA
         }
     }
 
-    @Inject(method = "render", at = @At("TAIL"))
-    private void helper$onRender(DrawContext context, int mouseX, int mouseY, float delta, CallbackInfo ci) {
-        if (this.helper$itemPanelWidget != null && HelperConfig.getInstance().enableSidePanel) {
-            this.helper$itemPanelWidget.render(context, mouseX, mouseY, delta);
-        }
-    }
 
-    @Inject(method = "mouseClicked", at = @At("HEAD"), cancellable = true)
-    private void helper$onMouseClicked(net.minecraft.client.gui.Click click, boolean doubleClick, CallbackInfoReturnable<Boolean> cir) {
-        if (this.helper$itemPanelWidget != null && HelperConfig.getInstance().enableSidePanel) {
-            if (this.helper$itemPanelWidget.mouseClicked(click, doubleClick)) {
-                cir.setReturnValue(true);
-            }
-        }
-    }
-
-    @Inject(method = "mouseScrolled", at = @At("HEAD"), cancellable = true)
-    private void helper$onMouseScrolled(double mouseX, double mouseY, double horizontalAmount, double verticalAmount, CallbackInfoReturnable<Boolean> cir) {
-        if (this.helper$itemPanelWidget != null && HelperConfig.getInstance().enableSidePanel) {
-            if (this.helper$itemPanelWidget.mouseScrolled(mouseX, mouseY, horizontalAmount, verticalAmount)) {
-                cir.setReturnValue(true);
-            }
-        }
-    }
 
     @Inject(method = "keyPressed", at = @At("HEAD"), cancellable = true)
     private void helper$onKeyPressed(net.minecraft.client.input.KeyInput keyInput, CallbackInfoReturnable<Boolean> cir) {
@@ -114,7 +91,7 @@ public abstract class HandledScreenMixin extends Screen implements HelperWidgetA
             }
 
             if (hoveredItem != null) {
-                java.util.List<net.minecraft.recipe.RecipeEntry<?>> recipes;
+                java.util.List<net.minecraft.recipe.RecipeDisplayEntry> recipes;
                 if (keyCode == GLFW.GLFW_KEY_R) {
                     recipes = com.example.client.recipe.RecipeIndexer.getRecipesForOutput(hoveredItem);
                 } else {
@@ -127,16 +104,4 @@ public abstract class HandledScreenMixin extends Screen implements HelperWidgetA
         }
     }
 
-    // Override charTyped to intercept character input for the search bar.
-    // Since HandledScreen doesn't override charTyped, we implement it here.
-    // The mixin merges this into HandledScreen, overriding the inherited default.
-    @Override
-    public boolean charTyped(CharInput charInput) {
-        if (this.helper$itemPanelWidget != null && HelperConfig.getInstance().enableSidePanel) {
-            if (this.helper$itemPanelWidget.charTyped(charInput)) {
-                return true;
-            }
-        }
-        return super.charTyped(charInput);
-    }
 }

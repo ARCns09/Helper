@@ -3,7 +3,9 @@
 	"package": "com.example.client.mixin",
 	"compatibilityLevel": "JAVA_21",
 	"client": [
-		"HandledScreenMixin"
+		"HandledScreenMixin",
+		"KeyboardMixin",
+		"HandledScreenAccessor"
 	],
 	"injectors": {
 		"defaultRequire": 1

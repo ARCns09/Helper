@@ -33,7 +33,6 @@ public class ItemPanelWidget {
     // Search bar position (bottom center)
     private int searchBoxX, searchBoxY, searchBoxW, searchBoxH;
     
-    private List<Item> allItems;
     private List<Item> filteredItems;
     
     private int page = 0;
@@ -55,60 +54,58 @@ public class ItemPanelWidget {
     
     public ItemPanelWidget(int screenWidth, int screenHeight, int guiRight, int guiTop, int guiHeight) {
         this.client = MinecraftClient.getInstance();
+        updateBounds(screenWidth, screenHeight, guiRight, guiTop, guiHeight);
+        updateFilter();
+    }
+    
+    public void updateBounds(int screenWidth, int screenHeight, int guiRight, int guiTop, int guiHeight) {
         this.screenWidth = screenWidth;
         this.screenHeight = screenHeight;
         
         // Grid starts right after inventory
         this.gridX = guiRight + 4;
-        int availWidth = screenWidth - this.gridX - 2;
-        this.columns = Math.max(1, availWidth / itemSize);
-        this.panelW = columns * itemSize;
         
-        // Header: 16px tall 
-        this.headerH = 16;
-        this.headerY = 2;
-        this.navBtnW = 14;
-        this.navBtnH = 14;
+        // Let's use the full height of the screen for REI/EMI style
+        int margin = 5;
+        this.headerH = 18;
+        this.headerY = margin;
         
-        // Grid starts below header
-        this.gridY = this.headerY + headerH + 2;
+        this.gridY = headerY + headerH + 2;
         
-        // Search bar at bottom center
-        this.searchBoxW = Math.min(200, screenWidth - 20);
+        // Calculate max space
+        int maxW = screenWidth - this.gridX - margin;
+        int maxH = screenHeight - this.gridY - margin;
+        
+        this.columns = maxW / itemSize;
+        if (this.columns < 1) this.columns = 1;
+        
+        // Leave space for search box at the bottom
+        int searchAreaHeight = 24;
+        
+        this.rows = (maxH - searchAreaHeight) / itemSize;
+        if (this.rows < 1) this.rows = 1;
+        
+        this.panelW = this.columns * itemSize;
+        
+        this.navBtnW = 16;
+        this.navBtnH = 16;
+        
+        this.searchBoxW = this.panelW;
         this.searchBoxH = 14;
-        this.searchBoxX = (screenWidth - searchBoxW) / 2;
-        this.searchBoxY = screenHeight - searchBoxH - 4;
-        
-        // Available rows
-        int availHeight = this.searchBoxY - 4 - this.gridY;
-        this.rows = Math.max(1, availHeight / itemSize);
+        this.searchBoxX = this.gridX;
+        this.searchBoxY = this.gridY + (this.rows * itemSize) + 4;
         
         // Nav button positions
         this.navLeftX = this.gridX;
         this.navRightX = this.gridX + panelW - navBtnW;
         
-        // Load all items except air
-        allItems = new ArrayList<>();
-        Registries.ITEM.forEach(item -> {
-            if (item != net.minecraft.item.Items.AIR) {
-                allItems.add(item);
-            }
-        });
-        filteredItems = new ArrayList<>(allItems);
+        
+        // Initialize search engine
+        updateFilter();
     }
     
     private void updateFilter() {
-        String lowerQuery = searchQuery.toLowerCase();
-        filteredItems.clear();
-        if (lowerQuery.isEmpty()) {
-            filteredItems.addAll(allItems);
-        } else {
-            for (Item item : allItems) {
-                if (item.getName().getString().toLowerCase().contains(lowerQuery)) {
-                    filteredItems.add(item);
-                }
-            }
-        }
+        filteredItems = com.example.client.search.SearchEngine.search(searchQuery);
         page = 0;
     }
     
@@ -145,30 +142,26 @@ public class ItemPanelWidget {
         context.fill(hx, headerY, hx + hw, headerY + headerH, BG_HEADER);
         drawBorder(context, hx, headerY, hw, headerH, BORDER_COLOR);
         
-        // Left arrow button ◀
+        // Left arrow button <
         int lbx = gridX + 1;
         int lby = headerY + 1;
         boolean leftHover = mouseX >= lbx && mouseX < lbx + navBtnW && mouseY >= lby && mouseY < lby + navBtnH;
         context.fill(lbx, lby, lbx + navBtnW, lby + navBtnH, leftHover ? NAV_BTN_HOVER : NAV_BTN_BG);
         drawBorder(context, lbx, lby, navBtnW, navBtnH, BORDER_COLOR);
-        context.drawCenteredTextWithShadow(tr, "\u25C0", lbx + navBtnW / 2, lby + 3, page > 0 ? 0xFFFFFF : 0x666666);
+        context.drawCenteredTextWithShadow(tr, "<", lbx + navBtnW / 2, lby + 3, page > 0 ? 0xFFFFFFFF : 0xFF666666);
         
-        // Right arrow button ▶
+        // Right arrow button >
         int rbx = gridX + panelW - navBtnW - 1;
         int rby = headerY + 1;
         boolean rightHover = mouseX >= rbx && mouseX < rbx + navBtnW && mouseY >= rby && mouseY < rby + navBtnH;
         context.fill(rbx, rby, rbx + navBtnW, rby + navBtnH, rightHover ? NAV_BTN_HOVER : NAV_BTN_BG);
         drawBorder(context, rbx, rby, navBtnW, navBtnH, BORDER_COLOR);
-        context.drawCenteredTextWithShadow(tr, "\u25B6", rbx + navBtnW / 2, rby + 3, page < maxPage ? 0xFFFFFF : 0x666666);
-        
-        // Search icon 🔍 (simple "S" icon next to left button)
-        int searchIconX = lbx + navBtnW + 4;
-        context.drawTextWithShadow(tr, "\u26B2", searchIconX, headerY + 4, 0xCCCCCC);
+        context.drawCenteredTextWithShadow(tr, ">", rbx + navBtnW / 2, rby + 3, page < maxPage ? 0xFFFFFFFF : 0xFF666666);
         
         // Page text "Page X of Y" centered
         String pageText = "Page " + (page + 1) + " of " + (maxPage + 1);
         int centerX = gridX + panelW / 2;
-        context.drawCenteredTextWithShadow(tr, pageText, centerX, headerY + 4, 0xFFFFFF);
+        context.drawCenteredTextWithShadow(tr, pageText, centerX, headerY + 5, 0xFFFFFFFF);
         
         // Progress bar under page text
         if (maxPage > 0) {
@@ -223,10 +216,10 @@ public class ItemPanelWidget {
         String displayText;
         if (searchQuery.isEmpty() && !searchFocused) {
             displayText = "Search...";
-            context.drawTextWithShadow(tr, displayText, searchBoxX + 4, searchBoxY + 3, 0x888888);
+            context.drawTextWithShadow(tr, displayText, searchBoxX + 4, searchBoxY + 3, 0xFF888888);
         } else {
             displayText = searchQuery;
-            context.drawTextWithShadow(tr, displayText, searchBoxX + 4, searchBoxY + 3, 0xFFFFFF);
+            context.drawTextWithShadow(tr, displayText, searchBoxX + 4, searchBoxY + 3, 0xFFFFFFFF);
             // Blinking cursor
             if (searchFocused && (searchCursorTick / 10) % 2 == 0) {
                 int cursorX = searchBoxX + 4 + tr.getWidth(displayText);
@@ -242,9 +235,7 @@ public class ItemPanelWidget {
         }
     }
     
-    public boolean mouseClicked(Click click, boolean doubleClick) {
-        double mouseX = click.x();
-        double mouseY = click.y();
+    public boolean mouseClicked(double mouseX, double mouseY, int button) {
         
         // Handle search bar click
         if (mouseX >= searchBoxX && mouseX <= searchBoxX + searchBoxW && mouseY >= searchBoxY && mouseY <= searchBoxY + searchBoxH) {
@@ -272,13 +263,22 @@ public class ItemPanelWidget {
         
         // Handle clicking an item → open recipe viewer
         Item clickedItem = getHoveredItem(mouseX, mouseY);
-        if (clickedItem != null && click.button() == 0) {
-            java.util.List<net.minecraft.recipe.RecipeEntry<?>> recipes =
-                com.example.client.recipe.RecipeIndexer.getRecipesForOutput(clickedItem);
-            if (!recipes.isEmpty() && client.currentScreen != null) {
-                client.setScreen(new RecipePopupScreen(client.currentScreen, recipes));
+        if (clickedItem != null) {
+            if (button == 0) { // Left click: show recipes
+                java.util.List<net.minecraft.recipe.RecipeDisplayEntry> recipes =
+                    com.example.client.recipe.RecipeIndexer.getRecipesForOutput(clickedItem);
+                if (!recipes.isEmpty() && client.currentScreen != null) {
+                    client.setScreen(new RecipePopupScreen(client.currentScreen, recipes));
+                }
+                return true;
+            } else if (button == 1) { // Right click: show usages
+                java.util.List<net.minecraft.recipe.RecipeDisplayEntry> usages =
+                    com.example.client.recipe.RecipeIndexer.getRecipesForIngredient(clickedItem);
+                if (!usages.isEmpty() && client.currentScreen != null) {
+                    client.setScreen(new RecipePopupScreen(client.currentScreen, usages));
+                }
+                return true;
             }
-            return true;
         }
         
         return false;
@@ -322,9 +322,8 @@ public class ItemPanelWidget {
     
     public boolean charTyped(CharInput charInput) {
         if (searchFocused) {
-            char c = (char) charInput.codepoint();
-            if (c >= 32) { // Printable characters
-                searchQuery += c;
+            if (charInput.isValidChar()) {
+                searchQuery += charInput.asString();
                 updateFilter();
                 return true;
             }
